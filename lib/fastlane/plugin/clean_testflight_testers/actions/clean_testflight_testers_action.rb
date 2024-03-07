@@ -29,7 +29,7 @@ module Fastlane
         spaceship_app ||= Spaceship::ConnectAPI::App.find(app_identifier)
         UI.user_error!("Couldn't find app '#{app_identifier}' on iTunes Connect") unless spaceship_app
 
-        all_testers = spaceship_app.get_beta_testers(limit: ENV['INPUT_BETA_TESTERS_LIMIT'] || 200)
+        all_testers = spaceship_app.get_beta_testers(includes: 'betaTesterMetrics', limit: params[:limit] || 200)
         counter = 0
 
         all_testers.each do |current_tester|
@@ -84,7 +84,7 @@ module Fastlane
       end
 
       def self.authors
-        ["KrauseFx"]
+        ["olaparty"]
       end
 
       def self.details
@@ -146,6 +146,14 @@ module Fastlane
                                      verify_block: proc do |value|
                                        UI.user_error!("Please enter a valid build number") unless value.to_i >= 0
                                      end),
+          FastlaneCore::ConfigItem.new(key: :limit,
+                                     short_option: "-l",
+                                     env_name: "CLEAN_TESTFLIGHT_TESTERS_LIMIT",
+                                     description: "Limit the number of testers to fetch",
+                                     optional: true,
+                                     default_value: 200,
+                                     type: Integer
+                                     ),
           FastlaneCore::ConfigItem.new(key: :dry_run,
                                      short_option: "-d",
                                      env_name: "CLEAN_TESTFLIGHT_TESTERS_DRY_RUN",
