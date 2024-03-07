@@ -5,20 +5,31 @@ module Fastlane
         require 'spaceship'
 
         app_identifier = params[:app_identifier]
-        username = params[:username]
 
-        UI.message("Login to iTunes Connect (#{username})")
-        Spaceship::Tunes.login(username)
-        Spaceship::Tunes.select_team
-        UI.message("Login successful")
+        if (api_token = Spaceship::ConnectAPI::Token.from(hash: params[:api_key]))
+          UI.message("Creating authorization token for App Store Connect API")
+          Spaceship::ConnectAPI.token = api_token
+        elsif !Spaceship::ConnectAPI.token.nil?
+          UI.message("Using existing authorization token for App Store Connect API")
+        else
+          params[:username] ||= CredentialsManager::AppfileConfig.try_fetch_value(:apple_id)
+  
+          # Username is now optional since addition of App Store Connect API Key
+          # Force asking for username to prompt user if not already set
+          params.fetch(:username, force_ask: true)
+  
+          UI.message("Login to App Store Connect (#{params[:username]})")
+          Spaceship::ConnectAPI.login(params[:username], use_portal: false, use_tunes: true, tunes_team_id: params[:team_id], team_name: params[:team_name])
+          UI.message("Login successful")
+        end
 
         UI.message("Fetching all TestFlight testers, this might take a few minutes, depending on the number of testers")
 
         # Convert from bundle identifier to app ID
         spaceship_app ||= Spaceship::ConnectAPI::App.find(app_identifier)
-        UI.user_error!("Couldn't find app '#{app_identifier}' on the account of '#{username}' on iTunes Connect") unless spaceship_app
+        UI.user_error!("Couldn't find app '#{app_identifier}' on iTunes Connect") unless spaceship_app
 
-        all_testers = spaceship_app.get_beta_testers(includes: "betaTesterMetrics", limit: 200)
+        all_testers = spaceship_app.get_beta_testers(limit: ENV['INPUT_BETA_TESTERS_LIMIT'] || 200)
         counter = 0
 
         all_testers.each do |current_tester|
@@ -89,6 +100,7 @@ module Fastlane
                                      short_option: "-u",
                                      env_name: "CLEAN_TESTFLIGHT_TESTERS_USERNAME",
                                      description: "Your Apple ID Username",
+                                     optional: true,
                                      default_value: user),
           FastlaneCore::ConfigItem.new(key: :app_identifier,
                                        short_option: "-a",
@@ -139,7 +151,15 @@ module Fastlane
                                      env_name: "CLEAN_TESTFLIGHT_TESTERS_DRY_RUN",
                                      description: "Only print inactive users, don't delete them",
                                      default_value: false,
-                                     is_string: false)
+                                     is_string: false),
+          FastlaneCore::ConfigItem.new(key: :api_key,
+                                     env_names: ["PILOT_API_KEY"],
+                                     description: "Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-hash-option)",
+                                     type: Hash,
+                                     optional: true,
+                                     sensitive: true,
+                                     conflicting_options: [:username]),
+
         ]
       end
 
